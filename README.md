@@ -26,7 +26,8 @@ ser transparente sobre o processo, não só o resultado.
 ## ✨ Funcionalidades
 
 - CRUD reativo completo de tarefas (criar, listar, buscar, atualizar status, remover)
-- Endpoint de streaming em tempo real via SSE *(em desenvolvimento)*
+- Endpoint de streaming em tempo real via SSE
+- Streaming distribuído com Apache Kafka *(planejado)*
 - Testes reativos com `StepVerifier` e `WebTestClient` *(em desenvolvimento)*
 - Pipeline de CI/CD com GitHub Actions *(em desenvolvimento)*
 - Deploy containerizado em Kubernetes *(planejado)*
@@ -34,16 +35,17 @@ ser transparente sobre o processo, não só o resultado.
 
 ## 🛠️ Stack técnica
 
-| Camada          | Tecnologia              | Por quê                                                   |
-|-----------------|-------------------------|-----------------------------------------------------------|
-| Linguagem       | Kotlin                  | Concisão, null safety, interoperabilidade JVM             |
-| Framework       | Spring Boot 4 + WebFlux | Programação reativa não-bloqueante nativa                 |
-| Runtime         | Java 25 (LTS)           | Versão LTS mais atual, suportada oficialmente pelo Spring |
-| Banco de dados  | PostgreSQL + R2DBC      | Driver relacional totalmente reativo                      |
-| Containerização | Docker / Docker Compose | Ambiente reprodutível local                               |
-| CI/CD           | GitHub Actions          | Build, testes e publicação de imagem automatizados        |
-| Orquestração    | Kubernetes              | Deploy, escalabilidade e resiliência                      |
-| Nuvem           | AWS (EKS, RDS, ECR)     | Infraestrutura gerenciada em produção                     |
+| Camada               | Tecnologia                 | Por quê                                                   |
+|----------------------|----------------------------|-----------------------------------------------------------|
+| Linguagem            | Kotlin                     | Concisão, null safety, interoperabilidade JVM             |
+| Framework            | Spring Boot 4 + WebFlux    | Programação reativa não-bloqueante nativa                 |
+| Runtime              | Java 25 (LTS)              | Versão LTS mais atual, suportada oficialmente pelo Spring |
+| Banco de dados       | PostgreSQL + R2DBC         | Driver relacional totalmente reativo                      |
+| Containerização      | Docker / Docker Compose    | Ambiente reprodutível local                               |
+| Streaming de eventos | Apache Kafka *(planejado)* | Streaming distribuído entre múltiplas instâncias          |
+| CI/CD                | GitHub Actions             | Build, testes e publicação de imagem automatizados        |
+| Orquestração         | Kubernetes                 | Deploy, escalabilidade e resiliência                      |
+| Nuvem                | AWS (EKS, RDS, ECR)        | Infraestrutura gerenciada em produção                     |
 
 ## 🏗️ Arquitetura
 
@@ -72,7 +74,7 @@ concorrência com poucos recursos.
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/alyssonaldrin/reactive-tasks-kotlin-webflux.git
+git clone https://github.com/alyssonaldrin/reactive-tasks.git
 cd reactive-tasks
 
 # 2. Suba o banco de dados
@@ -106,13 +108,14 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 
 - [x] Setup inicial (Kotlin + WebFlux + R2DBC + Java 25)
 - [x] CRUD reativo de tarefas
-- [x] Documentação da API (Postman)
 - [x] Endpoint de streaming (SSE)
+- [x] Documentação da API (Postman)
 - [ ] Testes reativos (StepVerifier / WebTestClient)
 - [ ] Dockerfile da aplicação
+- [ ] Streaming distribuído com Kafka (substituindo o Sinks em memória)
 - [ ] Pipeline CI/CD (GitHub Actions)
 - [ ] Deploy em Kubernetes local
-- [ ] Deploy em AWS (EKS + RDS)
+- [ ] Deploy em AWS (EKS + RDS + MSK)
 
 ## 📚 Documentação adicional
 
