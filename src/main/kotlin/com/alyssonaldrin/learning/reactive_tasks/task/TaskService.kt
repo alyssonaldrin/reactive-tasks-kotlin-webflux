@@ -6,7 +6,8 @@ import reactor.core.publisher.Mono
 
 @Service
 class TaskService(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val eventPublisher: TaskEventPublisher
 ) {
 
     fun findAll(): Flux<Task> = repository.findAll()
@@ -16,13 +17,13 @@ class TaskService(
     fun create(title: String): Mono<Task> {
         val task = Task(title = title)
         return repository.save(task)
+            .doOnNext { saved -> eventPublisher.publish(saved) }
     }
 
     fun toggleCompleted(id: Long): Mono<Task> {
         return repository.findById(id)
-            .flatMap { task ->
-                repository.save(task.copy(completed = !task.completed))
-            }
+            .flatMap { task -> repository.save(task.copy(completed = !task.completed)) }
+            .doOnNext { updated -> eventPublisher.publish(updated) }
     }
 
     fun delete(id: Long): Mono<Void> = repository.deleteById(id)

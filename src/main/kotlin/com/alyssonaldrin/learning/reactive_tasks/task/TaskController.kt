@@ -1,5 +1,6 @@
 package com.alyssonaldrin.learning.reactive_tasks.task
 
+import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -7,7 +8,8 @@ import reactor.core.publisher.Mono
 @RestController
 @RequestMapping("/api/tasks")
 class TaskController(
-    private val service: TaskService
+    private val service: TaskService,
+    private val eventPublisher: TaskEventPublisher
 ) {
 
     @GetMapping
@@ -26,6 +28,9 @@ class TaskController(
 
     @DeleteMapping("/{id}")
     fun delete(@PathVariable id: Long): Mono<Void> = service.delete(id)
+
+    @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+    fun stream(): Flux<Task> = eventPublisher.stream()
 }
 
 data class CreateTaskRequest(val title: String)
