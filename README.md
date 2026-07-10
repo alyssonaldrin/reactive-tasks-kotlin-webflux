@@ -107,7 +107,7 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 - [x] Setup inicial (Kotlin + WebFlux + R2DBC + Java 25)
 - [x] CRUD reativo de tarefas
 - [x] Documentação da API (Postman)
-- [ ] Endpoint de streaming (SSE)
+- [x] Endpoint de streaming (SSE)
 - [ ] Testes reativos (StepVerifier / WebTestClient)
 - [ ] Dockerfile da aplicação
 - [ ] Pipeline CI/CD (GitHub Actions)
