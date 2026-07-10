@@ -1,22 +1,11 @@
 {
   "info": {
+    "_postman_id": "eeffa989-4795-40d7-8d96-a3ddac6b264d",
     "name": "Reactive Tasks API",
     "description": "Collection da API reativa de tarefas (Spring WebFlux + Kotlin + R2DBC).\n\nUse o ambiente 'Local' para rodar contra http://localhost:8080.\n\nEndpoints cobertos:\n- Listar tarefas\n- Buscar tarefa por ID\n- Criar tarefa\n- Alternar status de conclusão\n- Remover tarefa\n\nEsta collection é mantida junto ao código-fonte em /docs/postman.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "28542588"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "{{baseUrl}}",
-      "type": "string"
-    },
-    {
-      "key": "taskId",
-      "value": "1",
-      "type": "string",
-      "description": "ID de uma tarefa existente, usado nas requests de buscar/atualizar/remover. Atualize após criar uma tarefa."
-    }
-  ],
   "item": [
     {
       "name": "Tasks",
@@ -28,8 +17,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tasks",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tasks"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
             },
             "description": "Retorna um Flux<Task> serializado como array JSON. Todas as tarefas cadastradas."
           },
@@ -42,8 +36,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tasks", "{{taskId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskId}}"
+              ]
             },
             "description": "Retorna um Mono<Task>. Se o ID não existir, o corpo da resposta vem vazio (204/404 dependendo da configuração de tratamento de erro)."
           },
@@ -51,25 +51,6 @@
         },
         {
           "name": "Criar tarefa",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Aprender WebFlux\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/tasks",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tasks"]
-            },
-            "description": "Cria uma nova tarefa. Body esperado: { \"title\": string }. Retorna a tarefa criada, incluindo o ID gerado pelo banco."
-          },
           "event": [
             {
               "listen": "test",
@@ -94,6 +75,30 @@
               }
             }
           ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Aprender WebFlux\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "description": "Cria uma nova tarefa. Body esperado: { \"title\": string }. Retorna a tarefa criada, incluindo o ID gerado pelo banco."
+          },
           "response": []
         },
         {
@@ -103,8 +108,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tasks/{{taskId}}/toggle",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tasks", "{{taskId}}", "toggle"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskId}}",
+                "toggle"
+              ]
             },
             "description": "Inverte o campo 'completed' da tarefa (true <-> false). Não precisa de body."
           },
@@ -117,14 +129,61 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tasks", "{{taskId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskId}}"
+              ]
             },
             "description": "Remove a tarefa pelo ID. Retorna 200 com corpo vazio (Mono<Void>)."
           },
           "response": []
         }
       ]
+    },
+    {
+      "name": "Streaming (SSE)",
+      "item": [
+        {
+          "name": "Conectar ao stream de eventos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "stream"
+              ]
+            },
+            "description": "Abre uma conexão persistente via Server-Sent Events. Mantenha esta request 'em execução' na aba de resposta do Postman (ele mostra os eventos chegando ao vivo, tipo um log gotejando) enquanto cria/atualiza tarefas em outra aba. Cada nova tarefa criada ou atualizada aparece aqui em tempo real, sem precisar dar refresh."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "{{baseUrl}}"
+    },
+    {
+      "key": "taskId",
+      "value": "1",
+      "description": "ID de uma tarefa existente, usado nas requests de buscar/atualizar/remover. Atualize após criar uma tarefa."
     }
   ]
 }
