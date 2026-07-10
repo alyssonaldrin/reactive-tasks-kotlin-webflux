@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Logs
+*.log
+
+# Variáveis de ambiente / segredos (NUNCA versionar)
+.env
+.env.local
+application-local.yml
+application-secrets.yml
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Docker (dados persistidos localmente, se usar bind mount em vez de volume nomeado)
+postgres-data/
