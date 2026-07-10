@@ -61,9 +61,27 @@ Processado: 4
 
 ---
 
-## Fase 2 — Em andamento
+## Fase 2 — Streaming com SSE
 
-*(vou preencher conforme avançamos: Repository, primeiro endpoint, SSE...)*
+### Bug: conexão SSE fechando instantaneamente
+
+Depois de implementar o endpoint de stream com `Sinks.many().multicast()`,
+todas as conexões (curl, navegador, Postman) fechavam na hora, sem erro aparente.
+
+**Causa:** por padrão, `onBackpressureBuffer()` usa `autoCancel = true`. Isso
+significa que assim que o último assinante se desconecta, o Sink se marca como
+encerrado *para sempre* — qualquer conexão nova depois disso recebe um sinal de
+"já terminou" instantaneamente.
+
+**Correção:** desativar o autoCancel explicitamente:
+\`\`\`kotlin
+Sinks.many().multicast().onBackpressureBuffer<Task>(256, false)
+\`\`\`
+
+**Lição:** em programação reativa, o *ciclo de vida* dos publishers (quando eles
+começam, terminam, ou se resetam) é tão importante quanto a lógica de transformação
+dos dados. Um Sink não é só uma fila — ele tem estados (ativo, completo, com erro)
+que afetam todo mundo conectado nele.
 
 ---
 
