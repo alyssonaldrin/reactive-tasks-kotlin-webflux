@@ -1,0 +1,130 @@
+{
+  "info": {
+    "name": "Reactive Tasks API",
+    "description": "Collection da API reativa de tarefas (Spring WebFlux + Kotlin + R2DBC).\n\nUse o ambiente 'Local' para rodar contra http://localhost:8080.\n\nEndpoints cobertos:\n- Listar tarefas\n- Buscar tarefa por ID\n- Criar tarefa\n- Alternar status de conclusão\n- Remover tarefa\n\nEsta collection é mantida junto ao código-fonte em /docs/postman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "{{baseUrl}}",
+      "type": "string"
+    },
+    {
+      "key": "taskId",
+      "value": "1",
+      "type": "string",
+      "description": "ID de uma tarefa existente, usado nas requests de buscar/atualizar/remover. Atualize após criar uma tarefa."
+    }
+  ],
+  "item": [
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Listar todas as tarefas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"]
+            },
+            "description": "Retorna um Flux<Task> serializado como array JSON. Todas as tarefas cadastradas."
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar tarefa por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "Retorna um Mono<Task>. Se o ID não existir, o corpo da resposta vem vazio (204/404 dependendo da configuração de tratamento de erro)."
+          },
+          "response": []
+        },
+        {
+          "name": "Criar tarefa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Aprender WebFlux\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"]
+            },
+            "description": "Cria uma nova tarefa. Body esperado: { \"title\": string }. Retorna a tarefa criada, incluindo o ID gerado pelo banco."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status é 200 ou 201\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "",
+                  "const responseJson = pm.response.json();",
+                  "",
+                  "pm.test(\"Resposta contém um id\", function () {",
+                  "    pm.expect(responseJson).to.have.property('id');",
+                  "});",
+                  "",
+                  "if (responseJson.id) {",
+                  "    pm.environment.set(\"taskId\", responseJson.id);",
+                  "    console.log(\"taskId atualizado para: \" + responseJson.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Alternar conclusão da tarefa",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}", "toggle"]
+            },
+            "description": "Inverte o campo 'completed' da tarefa (true <-> false). Não precisa de body."
+          },
+          "response": []
+        },
+        {
+          "name": "Remover tarefa",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "Remove a tarefa pelo ID. Retorna 200 com corpo vazio (Mono<Void>)."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
