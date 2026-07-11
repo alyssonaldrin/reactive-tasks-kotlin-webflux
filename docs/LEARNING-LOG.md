@@ -161,40 +161,18 @@ buscas e tutoriais antigos está defasado. Deixar o IntelliJ sugerir o import
 correto (Alt+Enter) e checar a documentação oficial da versão exata em uso é
 mais confiável do que copiar exemplos prontos.
 
-### JaCoCo não suportava Java 25 (versão 0.8.12)
-
-Ao rodar `jacocoTestReport`, o build falhou tentando instrumentar até classes
-internas do JDK (`sun.security.*`), com o erro `Unsupported class file major
-version 69` — 69 é o major version do bytecode do **Java 25**.
-
-**Causa:** JaCoCo `0.8.12` não tinha suporte oficial a Java 25. O suporte
-oficial só chegou na versão `0.8.14`.
-
-**Correção:** atualizar `toolVersion` no bloco `jacoco { }` para `"0.8.14"`.
-
-**Lição:** ao usar a versão mais recente de uma linguagem (JDK 25, LTS
-recém-lançado), quase toda ferramenta do ecossistema (coverage, análise
-estática, linters) pode estar um passo atrás em compatibilidade. Vale sempre
-checar o changelog oficial da ferramenta antes de assumir que "deveria
-funcionar".
-
-### Gradle Daemon não recarrega `gradle.properties` sozinho
-
-Depois de mover `org.gradle.java.home` para o `gradle.properties` global
-(`~/.gradle/gradle.properties`), o build continuou falhando como se o arquivo
-não existisse. Causa: o Gradle Daemon (processo em background que acelera
-builds) mantém configuração em memória e não relê arquivos de properties
-automaticamente. Solução: `./gradlew --stop` força o encerramento do daemon,
-e a próxima execução recarrega tudo do zero.
-
 ---
 
-## Fase 4 — Containerização
+## Fase 4 — Containerização (Docker)
 
-- Criado Dockerfile multi-stage: etapa `build` (JDK completo, compila o `.jar`)
-  e etapa `runtime` (só o JRE, roda o `.jar` final) — imagem final bem mais
-  enxuta que carregar o JDK completo em produção.
-- Usuário não-root (`spring`) criado na imagem por segurança.
+- Criado `Dockerfile` **multi-stage**: etapa `build` (imagem com JDK completo,
+  compila o `.jar` via `./gradlew bootJar`) e etapa `runtime` (só o JRE, roda
+  o `.jar` final) — a imagem final não carrega compilador, Gradle nem cache de
+  dependências, só o artefato executável.
+- Usuário não-root (`spring`) criado na imagem por segurança — se algo
+  comprometer o container, o processo não roda com privilégios de root.
+- `.dockerignore` criado seguindo o mesmo princípio do `.gitignore`, evitando
+  copiar `.gradle/`, `.idea/`, segredos etc para o contexto de build.
 
 ### Containers não compartilham "localhost" entre si
 
@@ -210,7 +188,7 @@ onde os serviços se resolvem pelo nome.
 
 **Lição:** "localhost" dentro de um container não é a máquina host nem outros
 containers — é o próprio container. Comunicação entre containers precisa
-passar pela rede que os orquestra (Compose, ou depois, Kubernetes).
+passar pela rede que os orquestra (Compose, e depois, Kubernetes).
 
 ### `healthcheck` evita corrida entre containers
 
@@ -218,6 +196,72 @@ Sem um healthcheck no Postgres, a aplicação às vezes tentava conectar antes d
 banco estar realmente pronto para aceitar conexões (mesmo já "rodando").
 `depends_on: condition: service_healthy` resolve isso, esperando o Postgres
 responder a `pg_isready` antes de liberar a aplicação para iniciar.
+
+---
+
+## Fase 4.5 — Streaming distribuído com Kafka
+
+Substituído o `Sinks` em memória (Fase 2) por Kafka de verdade, resolvendo uma
+limitação real de arquitetura: com `Sinks`, múltiplas instâncias da aplicação
+rodando em paralelo (cenário normal com Kubernetes fazendo scale horizontal)
+não veriam eventos umas das outras — cada uma tinha seu próprio Sink isolado.
+
+- Kafka rodando em modo **KRaft** no `docker-compose.yml` (sem Zookeeper,
+  modo mais moderno e simples de configurar).
+- `reactor-kafka` usado em vez do `spring-boot-starter-kafka` — biblioteca
+  mais "crua", que mantém a API reativa (`Flux`/`Mono`) sem depender da
+  autoconfiguração do Spring Boot.
+- `TaskEventPublisher` reescrito com `KafkaSender` (producer) e `KafkaReceiver`
+  (consumer), serializando/desserializando `Task` ↔ JSON manualmente via
+  Jackson — diferente do `Sinks`, que não precisava dessa conversão porque
+  nunca saía da memória da aplicação.
+- Cada conexão SSE cria um `KafkaReceiver` com um **group ID único**
+  (`"sse-stream-${System.nanoTime()}"`) e `AUTO_OFFSET_RESET_CONFIG = "latest"`,
+  replicando o comportamento "multicast" que o `Sinks` tinha (todo cliente
+  recebe todos os eventos, só a partir do momento em que conectou).
+- Interface pública (`publish()`, `stream()`) mantida idêntica à versão com
+  `Sinks` — `TaskService` e `TaskController` não precisaram mudar nada. Boa
+  prova prática de que programar contra uma abstração simples permite trocar
+  a implementação por trás sem espalhar a mudança pelo resto do código.
+
+### Configurações customizadas devem usar prefixo próprio, não `spring.*`
+
+Inicialmente configurei `bootstrap-servers` e `topics` do Kafka sob o prefixo
+`spring.kafka.*` no `application.yaml`. Como não usamos o starter oficial do
+Spring Kafka (só o `reactor-kafka`, lido manualmente via `@Value`), o IntelliJ
+não reconhecia essas propriedades como válidas (aviso "Cannot resolve
+configuration property"), porque não há metadados delas no classpath.
+
+**Correção:** mover tudo para um prefixo próprio, `app.kafka.*`, deixando
+claro que é configuração customizada da aplicação, não uma propriedade oficial
+do Spring Boot sendo interpretada pela autoconfiguração.
+
+### YAML aninhado incorretamente falha silenciosamente
+
+Ao adicionar `app.kafka.topics.task-events`, cheguei a aninhar `topics` dentro
+de `spring.kafka` por engano. Como o `@Value` tinha um valor padrão definido
+(`:task-events`), a aplicação **não quebrou** — só ignorou silenciosamente a
+configuração customizada e sempre usou o padrão fixo.
+
+**Lição:** um valor padrão em `@Value` é ótimo para resiliência, mas pode
+mascarar um erro de configuração — a chave errada "funciona" sem avisar nada.
+Vale sempre conferir a hierarquia do YAML com atenção quando uma propriedade
+não está tendo o efeito esperado.
+
+### Nomes de tópicos como configuração, não constante fixa
+
+O nome do tópico (`task-events`) começou como constante fixa no código,
+depois foi movido para `application.yaml`, seguindo o mesmo padrão do
+`bootstrap-servers`. Permite usar tópicos diferentes por ambiente (dev,
+staging, prod) sem recompilar a aplicação — importante para não misturar
+dados de ambientes diferentes no mesmo tópico.
+
+---
+
+## Fase 5 em diante — Em andamento
+
+*(vou preencher conforme avançamos: CI/CD, Kubernetes, AWS...)*
+
 ---
 
 ## Perguntas em aberto / pra revisitar depois
@@ -228,3 +272,5 @@ responder a `pg_isready` antes de liberar a aplicação para iniciar.
   subscription (via retorno do Controller)?
 - Vale a pena testar o conteúdo real do stream SSE (não só o Content-Type) em
   um teste de integração mais completo?
+- Como testar `TaskEventPublisher` agora que ele depende de um Kafka real
+  rodando? Vale a pena um teste de integração com Testcontainers?
