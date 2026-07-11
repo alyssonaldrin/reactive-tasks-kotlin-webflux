@@ -1,0 +1,25 @@
+# Não copiar builds anteriores, cache do Gradle/Kotlin, IDE, etc — o Docker
+# tem seu próprio processo de build isolado, não precisa desse "lixo" local
+.gradle/
+.kotlin/
+build/
+out/
+.idea/
+*.iml
+
+# Não copiar arquivos de ambiente/segredos para dentro da imagem
+.env
+.env.local
+application-local.yml
+application-secrets.yml
+
+# Não copiar arquivos do Git nem documentação (não afetam o build da aplicação)
+.git/
+.gitignore
+docs/
+README.md
+LEARNING-LOG.md
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
