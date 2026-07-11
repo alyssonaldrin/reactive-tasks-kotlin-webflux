@@ -35,17 +35,18 @@ ser transparente sobre o processo, não só o resultado.
 
 ## 🛠️ Stack técnica
 
-| Camada               | Tecnologia                 | Por quê                                                   |
-|----------------------|----------------------------|-----------------------------------------------------------|
-| Linguagem            | Kotlin                     | Concisão, null safety, interoperabilidade JVM             |
-| Framework            | Spring Boot 4 + WebFlux    | Programação reativa não-bloqueante nativa                 |
-| Runtime              | Java 25 (LTS)              | Versão LTS mais atual, suportada oficialmente pelo Spring |
-| Banco de dados       | PostgreSQL + R2DBC         | Driver relacional totalmente reativo                      |
-| Containerização      | Docker / Docker Compose    | Ambiente reprodutível local                               |
-| Streaming de eventos | Apache Kafka *(planejado)* | Streaming distribuído entre múltiplas instâncias          |
-| CI/CD                | GitHub Actions             | Build, testes e publicação de imagem automatizados        |
-| Orquestração         | Kubernetes                 | Deploy, escalabilidade e resiliência                      |
-| Nuvem                | AWS (EKS, RDS, ECR)        | Infraestrutura gerenciada em produção                     |
+| Camada               | Tecnologia                             | Por quê                                                   |
+|----------------------|----------------------------------------|-----------------------------------------------------------|
+| Linguagem            | Kotlin                                 | Concisão, null safety, interoperabilidade JVM             |
+| Framework            | Spring Boot 4 + WebFlux                | Programação reativa não-bloqueante nativa                 |
+| Runtime              | Java 25 (LTS)                          | Versão LTS mais atual, suportada oficialmente pelo Spring |
+| Banco de dados       | PostgreSQL + R2DBC                     | Driver relacional totalmente reativo                      |
+| Containerização      | Docker / Docker Compose                | Ambiente reprodutível local                               |
+| Streaming de eventos | Apache Kafka                           | Streaming distribuído entre múltiplas instâncias          |
+| Observabilidade      | Prometheus, Grafana, ELK *(planejado)* | Métricas e logs centralizados                             |
+| CI/CD                | GitHub Actions                         | Build, testes e publicação de imagem automatizados        |
+| Orquestração         | Kubernetes                             | Deploy, escalabilidade e resiliência                      |
+| Nuvem                | AWS (EKS, RDS, ECR)                    | Infraestrutura gerenciada em produção                     |
 
 ## 🏗️ Arquitetura
 
@@ -112,7 +113,8 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 - [x] Documentação da API (Postman)
 - [x] Testes reativos (StepVerifier / WebTestClient)
 - [x] Dockerfile da aplicação
-- [ ] Streaming distribuído com Kafka (substituindo o Sinks em memória)
+- [x] Streaming distribuído com Kafka (substituindo o Sinks em memória)
+- [ ] Observabilidade: métricas (Prometheus + Grafana) e logs centralizados (ELK)
 - [ ] Pipeline CI/CD (GitHub Actions)
 - [ ] Deploy em Kubernetes local
 - [ ] Deploy em AWS (EKS + RDS + MSK)
