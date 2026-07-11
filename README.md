@@ -110,8 +110,8 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 - [x] CRUD reativo de tarefas
 - [x] Endpoint de streaming (SSE)
 - [x] Documentação da API (Postman)
-- [ ] Testes reativos (StepVerifier / WebTestClient)
-- [ ] Dockerfile da aplicação
+- [x] Testes reativos (StepVerifier / WebTestClient)
+- [x] Dockerfile da aplicação
 - [ ] Streaming distribuído com Kafka (substituindo o Sinks em memória)
 - [ ] Pipeline CI/CD (GitHub Actions)
 - [ ] Deploy em Kubernetes local

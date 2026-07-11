@@ -189,10 +189,35 @@ e a próxima execução recarrega tudo do zero.
 
 ---
 
-## Fase 4 em diante — Em andamento
+## Fase 4 — Containerização
 
-*(vou preencher conforme avançamos: Dockerfile, Kafka, CI/CD, Kubernetes, AWS...)*
+- Criado Dockerfile multi-stage: etapa `build` (JDK completo, compila o `.jar`)
+  e etapa `runtime` (só o JRE, roda o `.jar` final) — imagem final bem mais
+  enxuta que carregar o JDK completo em produção.
+- Usuário não-root (`spring`) criado na imagem por segurança.
 
+### Containers não compartilham "localhost" entre si
+
+Rodando `docker run` isolado, a aplicação não conseguia conectar no Postgres
+(`Cannot connect to localhost:5432`), mesmo com o Postgres rodando em outro
+container. Causa: cada container tem seu próprio "localhost" isolado — eles
+não se enxergam por padrão.
+
+**Correção:** adicionar a aplicação como serviço no próprio `docker-compose.yml`,
+usando o **nome do serviço** (`postgres`) como hostname em vez de `localhost`
+(`r2dbc:postgresql://postgres:5432/tasks`). O Compose cria uma rede interna
+onde os serviços se resolvem pelo nome.
+
+**Lição:** "localhost" dentro de um container não é a máquina host nem outros
+containers — é o próprio container. Comunicação entre containers precisa
+passar pela rede que os orquestra (Compose, ou depois, Kubernetes).
+
+### `healthcheck` evita corrida entre containers
+
+Sem um healthcheck no Postgres, a aplicação às vezes tentava conectar antes do
+banco estar realmente pronto para aceitar conexões (mesmo já "rodando").
+`depends_on: condition: service_healthy` resolve isso, esperando o Postgres
+responder a `pg_isready` antes de liberar a aplicação para iniciar.
 ---
 
 ## Perguntas em aberto / pra revisitar depois
