@@ -8,6 +8,12 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
 
+app:
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    topics:
+      task-events: ${TASK_EVENTS_TOPIC:task-events}
+
 logging:
   level:
     org.springframework.r2dbc: DEBUG
