@@ -256,6 +256,29 @@ depois foi movido para `application.yaml`, seguindo o mesmo padrão do
 staging, prod) sem recompilar a aplicação — importante para não misturar
 dados de ambientes diferentes no mesmo tópico.
 
+### `NoSuchMethodError` no ConsumerRecord — kafka-clients incompatível com reactor-kafka
+
+Depois de configurar Kafka, o consumer falhava com
+`NoSuchMethodError: 'void ConsumerRecord.<init>(...)'` ao tentar receber
+mensagens, mesmo com o producer publicando normalmente.
+
+**Causa:** o plugin `io.spring.dependency-management` gerencia automaticamente
+a versão do `kafka-clients`, mesmo sem declará-lo explicitamente. O Spring
+Boot 4.1 aplicava uma versão mais nova de `kafka-clients` que não é
+binariamente compatível com o `reactor-kafka:1.3.23` (assinatura de método
+diferente no construtor de `ConsumerRecord`).
+
+**Correção:** declarar `org.apache.kafka:kafka-clients` explicitamente numa
+versão compatível (`3.9.0`, mesma do broker no `docker-compose.yml`),
+sobrescrevendo o gerenciamento automático.
+
+**Lição:** gerenciamento automático de versões (BOMs) é ótimo na maioria dos
+casos, mas pode escolher uma versão incompatível para bibliotecas "por fora"
+do ecossistema oficial do Spring (como `reactor-kafka`, que não é
+`spring-kafka`). Quando uma dependência transitiva causa erro binário
+(`NoSuchMethodError`, `NoClassDefFoundError`), suspeitar de conflito de
+versão e considerar fixar a versão explicitamente.
+
 ---
 
 ## Fase 5 em diante — Em andamento
