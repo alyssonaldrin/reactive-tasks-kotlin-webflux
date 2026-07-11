@@ -114,7 +114,7 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 - [x] Testes reativos (StepVerifier / WebTestClient)
 - [x] Dockerfile da aplicação
 - [x] Streaming distribuído com Kafka (substituindo o Sinks em memória)
-- [ ] Observabilidade: métricas (Prometheus + Grafana) e logs centralizados (ELK)
+- [x] Observabilidade: métricas (Prometheus + Grafana) e logs centralizados (ELK)
 - [ ] Pipeline CI/CD (GitHub Actions)
 - [ ] Deploy em Kubernetes local
 - [ ] Deploy em AWS (EKS + RDS + MSK)

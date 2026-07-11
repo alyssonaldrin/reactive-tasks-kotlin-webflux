@@ -258,32 +258,79 @@ dados de ambientes diferentes no mesmo tópico.
 
 ### `NoSuchMethodError` no ConsumerRecord — kafka-clients incompatível com reactor-kafka
 
-Depois de configurar Kafka, o consumer falhava com
+Depois de tudo configurado, o consumer falhava com
 `NoSuchMethodError: 'void ConsumerRecord.<init>(...)'` ao tentar receber
-mensagens, mesmo com o producer publicando normalmente.
+mensagens, mesmo com o producer publicando normalmente (eventos não chegavam
+no SSE).
 
 **Causa:** o plugin `io.spring.dependency-management` gerencia automaticamente
-a versão do `kafka-clients`, mesmo sem declará-lo explicitamente. O Spring
-Boot 4.1 aplicava uma versão mais nova de `kafka-clients` que não é
-binariamente compatível com o `reactor-kafka:1.3.23` (assinatura de método
+a versão do `kafka-clients`, mesmo sem declará-lo explicitamente como
+dependência. O Spring Boot 4.1 aplicava uma versão de `kafka-clients` que não
+é binariamente compatível com o `reactor-kafka:1.3.23` (assinatura de método
 diferente no construtor de `ConsumerRecord`).
 
-**Correção:** declarar `org.apache.kafka:kafka-clients` explicitamente numa
-versão compatível (`3.9.0`, mesma do broker no `docker-compose.yml`),
-sobrescrevendo o gerenciamento automático.
+**Correção:** declarar `org.apache.kafka:kafka-clients:3.9.0` explicitamente
+no `build.gradle.kts`, mesma versão do broker usado no `docker-compose.yml`,
+sobrescrevendo o gerenciamento automático do Spring Boot.
 
 **Lição:** gerenciamento automático de versões (BOMs) é ótimo na maioria dos
 casos, mas pode escolher uma versão incompatível para bibliotecas "por fora"
 do ecossistema oficial do Spring (como `reactor-kafka`, que não é
-`spring-kafka`). Quando uma dependência transitiva causa erro binário
-(`NoSuchMethodError`, `NoClassDefFoundError`), suspeitar de conflito de
-versão e considerar fixar a versão explicitamente.
+`spring-kafka`). `NoSuchMethodError`/`NoClassDefFoundError` em tempo de
+execução (não na compilação) é um forte indício de conflito de versão entre
+dependências transitivas — vale fixar a versão explicitamente quando isso
+acontece.
+
+---
+
+## Fase 4.7 — Observabilidade (métricas com Prometheus + Grafana)
+
+Antes de configurar qualquer ferramenta, revisei os três pilares da
+observabilidade: **logs** (o que aconteceu, evento a evento), **métricas**
+(números agregados ao longo do tempo — taxa de requisições, latência, uso de
+memória) e **traces** (o caminho de uma requisição específica por múltiplos
+serviços — não explorado ainda). Essa fase cobre métricas primeiro; logs
+centralizados (ELK) ficam para uma próxima etapa.
+
+- Adicionado **Spring Boot Actuator** (expõe endpoints de monitoramento como
+  `/actuator/health`) e **Micrometer** com o registry específico do
+  Prometheus (`micrometer-registry-prometheus`) — o Micrometer coleta as
+  métricas de forma agnóstica de ferramenta; o registry é o "tradutor" que
+  formata os dados no formato de texto que o Prometheus espera ler.
+- `management.endpoints.web.exposure.include` configurado explicitamente
+  (`health, prometheus, metrics`) — por padrão o Actuator não expõe nada,
+  por segurança (evita vazar informação sensível se esquecido em produção).
+
+### Prometheus usa modelo *pull*, não *push*
+
+Diferente do que eu esperava, a aplicação não "envia" métricas para lugar
+nenhum. O Prometheus é quem periodicamente **visita** um endereço específico
+da aplicação (`/actuator/prometheus`, a cada `scrape_interval`, configurado
+como 15s) e coleta os dados de lá — chamado modelo *pull-based*. Configurado
+via `prometheus.yml`, apontando para `app:8080` (nome do serviço no Compose,
+mesmo princípio de rede interna já usado com Postgres e Kafka).
+
+### Bind mount vs volume nomeado
+
+No `docker-compose.yml`, o Prometheus usa
+`./prometheus.yml:/etc/prometheus/prometheus.yml` — um **bind mount**, que
+espelha um arquivo local dentro do container. Diferente do volume nomeado do
+Postgres/Grafana (`postgres_data`, `grafana_data`), que guarda **dados**
+gerados pelo próprio container, o bind mount serve para **injetar
+configuração** que eu edito localmente, fora do container.
+
+### Grafana como consumidor do Prometheus
+
+Grafana não coleta métricas por conta própria — ele se conecta ao Prometheus
+como uma **fonte de dados** e desenha os gráficos a partir do que o
+Prometheus já coletou e armazenou. Ainda falta conectar essa fonte de dados
+dentro da interface do Grafana e montar o primeiro dashboard.
 
 ---
 
 ## Fase 5 em diante — Em andamento
 
-*(vou preencher conforme avançamos: CI/CD, Kubernetes, AWS...)*
+*(vou preencher conforme avançamos: logs com ELK, CI/CD, Kubernetes, AWS...)*
 
 ---
 
