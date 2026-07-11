@@ -326,6 +326,17 @@ como uma **fonte de dados** e desenha os gráficos a partir do que o
 Prometheus já coletou e armazenou. Ainda falta conectar essa fonte de dados
 dentro da interface do Grafana e montar o primeiro dashboard.
 
+### "Cold start" na primeira requisição não é cache
+
+Percebi que a primeira requisição (ex: GET /api/tasks) demora visivelmente
+mais que as seguintes. Não há nenhum cache configurado no projeto — é o
+fenômeno de "cold start" da JVM: JIT compilation ainda não otimizou os
+métodos mais chamados, o pool de conexões R2DBC abre a primeira conexão real
+sob demanda, e algumas classes são carregadas/inicializadas só no primeiro
+uso. Confirmado visualmente no dashboard do Grafana: a primeira requisição
+aparece como um pico isolado de latência, estabilizando nas chamadas
+seguintes.
+
 ---
 
 ## Fase 5 em diante — Em andamento
