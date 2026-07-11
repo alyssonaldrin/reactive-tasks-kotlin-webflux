@@ -161,6 +161,32 @@ buscas e tutoriais antigos está defasado. Deixar o IntelliJ sugerir o import
 correto (Alt+Enter) e checar a documentação oficial da versão exata em uso é
 mais confiável do que copiar exemplos prontos.
 
+### JaCoCo não suportava Java 25 (versão 0.8.12)
+
+Ao rodar `jacocoTestReport`, o build falhou tentando instrumentar até classes
+internas do JDK (`sun.security.*`), com o erro `Unsupported class file major
+version 69` — 69 é o major version do bytecode do **Java 25**.
+
+**Causa:** JaCoCo `0.8.12` não tinha suporte oficial a Java 25. O suporte
+oficial só chegou na versão `0.8.14`.
+
+**Correção:** atualizar `toolVersion` no bloco `jacoco { }` para `"0.8.14"`.
+
+**Lição:** ao usar a versão mais recente de uma linguagem (JDK 25, LTS
+recém-lançado), quase toda ferramenta do ecossistema (coverage, análise
+estática, linters) pode estar um passo atrás em compatibilidade. Vale sempre
+checar o changelog oficial da ferramenta antes de assumir que "deveria
+funcionar".
+
+### Gradle Daemon não recarrega `gradle.properties` sozinho
+
+Depois de mover `org.gradle.java.home` para o `gradle.properties` global
+(`~/.gradle/gradle.properties`), o build continuou falhando como se o arquivo
+não existisse. Causa: o Gradle Daemon (processo em background que acelera
+builds) mantém configuração em memória e não relê arquivos de properties
+automaticamente. Solução: `./gradlew --stop` força o encerramento do daemon,
+e a próxima execução recarrega tudo do zero.
+
 ---
 
 ## Fase 4 em diante — Em andamento
