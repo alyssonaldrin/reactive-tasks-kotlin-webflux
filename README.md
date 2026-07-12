@@ -27,26 +27,27 @@ ser transparente sobre o processo, não só o resultado.
 
 - CRUD reativo completo de tarefas (criar, listar, buscar, atualizar status, remover)
 - Endpoint de streaming em tempo real via SSE
-- Streaming distribuído com Apache Kafka *(planejado)*
-- Testes reativos com `StepVerifier` e `WebTestClient` *(em desenvolvimento)*
+- Streaming distribuído com Apache Kafka
+- Testes reativos com `StepVerifier` e `WebTestClient`
+- Observabilidade completa: métricas (Prometheus + Grafana) e logs centralizados (ELK)
 - Pipeline de CI/CD com GitHub Actions *(em desenvolvimento)*
 - Deploy containerizado em Kubernetes *(planejado)*
 - Infraestrutura na AWS (EKS + RDS) *(planejado)*
 
 ## 🛠️ Stack técnica
 
-| Camada               | Tecnologia                             | Por quê                                                   |
-|----------------------|----------------------------------------|-----------------------------------------------------------|
-| Linguagem            | Kotlin                                 | Concisão, null safety, interoperabilidade JVM             |
-| Framework            | Spring Boot 4 + WebFlux                | Programação reativa não-bloqueante nativa                 |
-| Runtime              | Java 25 (LTS)                          | Versão LTS mais atual, suportada oficialmente pelo Spring |
-| Banco de dados       | PostgreSQL + R2DBC                     | Driver relacional totalmente reativo                      |
-| Containerização      | Docker / Docker Compose                | Ambiente reprodutível local                               |
-| Streaming de eventos | Apache Kafka                           | Streaming distribuído entre múltiplas instâncias          |
-| Observabilidade      | Prometheus, Grafana, ELK *(planejado)* | Métricas e logs centralizados                             |
-| CI/CD                | GitHub Actions                         | Build, testes e publicação de imagem automatizados        |
-| Orquestração         | Kubernetes                             | Deploy, escalabilidade e resiliência                      |
-| Nuvem                | AWS (EKS, RDS, ECR)                    | Infraestrutura gerenciada em produção                     |
+| Camada               | Tecnologia               | Por quê                                                   |
+|----------------------|--------------------------|-----------------------------------------------------------|
+| Linguagem            | Kotlin                   | Concisão, null safety, interoperabilidade JVM             |
+| Framework            | Spring Boot 4 + WebFlux  | Programação reativa não-bloqueante nativa                 |
+| Runtime              | Java 25 (LTS)            | Versão LTS mais atual, suportada oficialmente pelo Spring |
+| Banco de dados       | PostgreSQL + R2DBC       | Driver relacional totalmente reativo                      |
+| Containerização      | Docker / Docker Compose  | Ambiente reprodutível local                               |
+| Streaming de eventos | Apache Kafka             | Streaming distribuído entre múltiplas instâncias          |
+| Observabilidade      | Prometheus, Grafana, ELK | Métricas e logs centralizados                             |
+| CI/CD                | GitHub Actions           | Build, testes e publicação de imagem automatizados        |
+| Orquestração         | Kubernetes               | Deploy, escalabilidade e resiliência                      |
+| Nuvem                | AWS (EKS, RDS, ECR)      | Infraestrutura gerenciada em produção                     |
 
 ## 🏗️ Arquitetura
 
@@ -117,6 +118,7 @@ Documentação detalhada em [`docs/API.md`](./docs/API.md).
 - [x] Observabilidade: métricas (Prometheus + Grafana) e logs centralizados (ELK)
 - [ ] Pipeline CI/CD (GitHub Actions)
 - [ ] Deploy em Kubernetes local
+- [ ] Auto-scaling horizontal (HPA) validado com teste de carga (k6)
 - [ ] Deploy em AWS (EKS + RDS + MSK)
 
 ## 📚 Documentação adicional
