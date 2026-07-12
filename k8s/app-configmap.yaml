@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: reactive-tasks
+data:
+  SPRING_R2DBC_URL: "r2dbc:postgresql://postgres:5432/tasks"
+  SPRING_R2DBC_USERNAME: "postgres"
