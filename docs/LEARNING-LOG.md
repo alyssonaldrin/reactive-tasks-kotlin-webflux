@@ -434,9 +434,76 @@ parte pontual do ambiente.
 
 ---
 
-## Fase 5 em diante — Em andamento
+## Fase 5 — CI/CD com GitHub Actions
 
-*(vou preencher conforme avançamos: CI/CD, Kubernetes, AWS...)*
+### Conceitos
+
+**CI (Continuous Integration)**: toda vez que código é enviado, uma máquina
+remota builda e testa automaticamente, avisando cedo se algo quebrou.
+**CD (Continuous Delivery/Deployment)**: depois dos testes passarem, o
+pipeline continua sozinho empacotando e publicando a aplicação — nesse caso,
+gerando e publicando a imagem Docker.
+
+### Estrutura do workflow
+
+Criado `.github/workflows/ci.yml` com dois jobs:
+
+- **`test`**: roda em todo push/PR — checkout, setup do JDK 25, cache de
+  dependências do Gradle (mesmo princípio de cache de camadas do Docker,
+  aplicado ao CI), testes, relatório de cobertura (JaCoCo), publicação dos
+  relatórios como artefatos.
+- **`build-and-push`**: só roda em push direto (não em PR), e só **depois**
+  do job `test` passar (`needs: test`) — builda e publica a imagem Docker no
+  GitHub Container Registry (`ghcr.io`), usando o `GITHUB_TOKEN` automático
+  do Actions (sem precisar configurar nenhuma credencial manualmente).
+
+### Bug 1: branch errado nos gatilhos (`master` vs `main`)
+
+O workflow não disparava porque estava configurado para `main`, mas o
+repositório usava `master` como branch padrão. Ajustado temporariamente para
+`master`, e depois — ao renomear o branch padrão do repositório para `main`
+(alinhado com a convenção atual do GitHub, adotada desde 2020) — o workflow
+precisou ser atualizado de volta.
+
+**Lição:** os gatilhos (`on: push: branches: [...]`) e condições (`if:
+github.ref == 'refs/heads/...'`) de um workflow precisam bater exatamente com
+o nome real do branch usado no repositório — não há detecção automática.
+
+### Bug 2: `contextLoads()` falhava por falta de banco real
+
+O teste padrão gerado pelo Spring Initializr (`ReactiveTasksApplicationTests
+.contextLoads()`) sobe a aplicação inteira via `@SpringBootTest`, incluindo
+conexão real com R2DBC/Postgres. No runner do GitHub Actions, sem nenhum
+Postgres disponível, isso falhava com `ConnectException`.
+
+**Primeira correção tentada:** adicionar um **service container** do
+Postgres ao job `test` no workflow (`services: postgres: image: postgres:16
+...`) — o GitHub Actions sobe esse container junto com o job, disponível em
+`localhost:5432`, com healthcheck (`--health-cmd "pg_isready ..."`) para
+garantir que o job só prossegue depois do banco estar pronto. Isso resolveu
+o CI, mas expôs uma fragilidade equivalente também **localmente**: os testes
+só passavam se o Postgres do `docker-compose` já estivesse rodando no
+momento da execução — uma dependência implícita e frágil.
+
+**Decisão final:** em vez de manter essa dependência (mesmo com o service
+container resolvendo o CI), removi o arquivo `ReactiveTasksApplicationTests
+.kt` por completo. A cobertura de "o contexto Spring sobe corretamente" já é
+indiretamente validada pelos testes de slice (`@WebFluxTest` no
+`TaskControllerTest`), sem exigir infraestrutura externa só para confirmar
+que a aplicação inicializa. O service container do Postgres foi mantido no
+workflow mesmo assim, como base já pronta para futuros testes de integração
+reais (ex: com Testcontainers).
+
+**Lição:** nem todo teste "de fábrica" precisa ser mantido — vale avaliar
+criticamente se ele agrega valor real ou só adiciona fragilidade e
+acoplamento a infraestrutura externa, especialmente quando testes mais
+específicos (unitários e de slice) já cobrem o comportamento importante.
+
+---
+
+## Fase 6 em diante — Em andamento
+
+*(vou preencher conforme avançamos: Kubernetes, AWS...)*
 
 ---
 
