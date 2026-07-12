@@ -14,10 +14,6 @@ app:
     topics:
       task-events: ${TASK_EVENTS_TOPIC:task-events}
 
-logging:
-  level:
-    org.springframework.r2dbc: DEBUG
-
 management:
   endpoints:
     web:
@@ -30,3 +26,7 @@ management:
     metrics:
       export:
         enabled: true
+
+logging:
+  level:
+    org.springframework.r2dbc: DEBUG
