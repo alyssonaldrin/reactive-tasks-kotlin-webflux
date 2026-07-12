@@ -323,25 +323,120 @@ configuração** que eu edito localmente, fora do container.
 
 Grafana não coleta métricas por conta própria — ele se conecta ao Prometheus
 como uma **fonte de dados** e desenha os gráficos a partir do que o
-Prometheus já coletou e armazenou. Ainda falta conectar essa fonte de dados
-dentro da interface do Grafana e montar o primeiro dashboard.
+Prometheus já coletou e armazenou. Conectado com sucesso via
+`http://prometheus:9090` (nome do serviço no Compose) e importado um
+dashboard pronto da comunidade (ID `4701`, específico para Spring Boot +
+Micrometer) em vez de montar do zero.
 
 ### "Cold start" na primeira requisição não é cache
 
-Percebi que a primeira requisição (ex: GET /api/tasks) demora visivelmente
-mais que as seguintes. Não há nenhum cache configurado no projeto — é o
-fenômeno de "cold start" da JVM: JIT compilation ainda não otimizou os
-métodos mais chamados, o pool de conexões R2DBC abre a primeira conexão real
-sob demanda, e algumas classes são carregadas/inicializadas só no primeiro
-uso. Confirmado visualmente no dashboard do Grafana: a primeira requisição
-aparece como um pico isolado de latência, estabilizando nas chamadas
-seguintes.
+A primeira requisição a um endpoint (ex: `GET /api/tasks`) demora
+visivelmente mais que as seguintes, mesmo sem nenhum cache configurado no
+projeto. Causa: fenômeno de "cold start" da JVM — JIT compilation ainda não
+otimizou os métodos mais chamados, o pool de conexões R2DBC abre a primeira
+conexão real sob demanda, e algumas classes são carregadas/inicializadas só
+no primeiro uso. Confirmado visualmente no dashboard do Grafana: a primeira
+requisição aparece como um pico isolado de latência, estabilizando nas
+chamadas seguintes.
+
+---
+
+## Fase 4.7 (continuação) — Logs centralizados (ELK)
+
+### Logs estruturados em JSON antes de qualquer coisa
+
+Antes de montar o pipeline de coleta, troquei o formato de log da aplicação
+de texto simples para **JSON estruturado**, usando `logstash-logback-encoder`
+e um `logback-spring.xml` customizado. Isso facilita — e muito — o trabalho
+de quem for interpretar os logs depois (Logstash/Elasticsearch), evitando
+parsing complicado de texto livre com regex.
+
+### O pipeline: Filebeat → Logstash → Elasticsearch → Kibana
+
+Cada peça com um papel único: Filebeat **coleta**, Logstash **transforma**,
+Elasticsearch **armazena e indexa**, Kibana **visualiza**. Elasticsearch
+configurado em `discovery.type: single-node` (sem formar cluster) e com
+`xpack.security.enabled: false` (aceitável só em ambiente local isolado).
+
+### Bug 1: Filebeat recusa iniciar no Windows (permissões de bind mount)
+
+Erro: `"config file can only be writable by the owner"`. Bind mounts no
+Docker Desktop para Windows não preservam permissões Unix corretamente — o
+arquivo chega com permissão `777`, que o Filebeat rejeita por segurança.
+
+**Correção:** flag `--strict.perms=false` no `command` do serviço.
+
+### Bug 2: Filebeat "funcionando" mas sem logs visíveis
+
+`docker compose logs filebeat` retornava completamente vazio, mesmo com o
+processo rodando (confirmado via `docker compose top`). Causa: por padrão,
+o Filebeat grava logs internos em **arquivo**, não em `stdout` — e o Docker
+só captura o que vai para `stdout`/`stderr`.
+
+**Correção:** flag `-e` no `command`, forçando saída pelo console.
+
+**Lição geral (bugs 1 e 2):** container "Up" e processo rodando não significa
+necessariamente que está fazendo o que deveria — sempre vale confirmar
+comportamento real (aqui, via logs ou testes internos como
+`filebeat test config`/`test output`), não só o status do container.
+
+### Bug 3: autodiscover com hints não gerava configuração alguma
+
+Configurei o Filebeat para "descobrir" containers automaticamente via
+`filebeat.autodiscover` com `provider: docker` e `hints.enabled: true`,
+usando labels no `docker-compose.yml` (`co.elastic.logs/enabled: "true"`)
+para marcar qual container coletar. Mesmo com o label presente e reconhecido
+(confirmado nos logs de debug), o autodiscover nunca gerava uma configuração
+de coleta real — o campo `config` nos eventos de debug aparecia sempre vazio,
+para todos os containers, incluindo o da aplicação.
+
+**Decisão:** em vez de continuar depurando um mecanismo "mágico" e opaco,
+troquei para uma abordagem mais explícita e previsível: um input `type:
+container` lendo diretamente `/var/lib/docker/containers/*/*.log` (todos os
+containers), com um processor `drop_event` filtrando por
+`container.image.name` para manter só os logs da aplicação.
+
+**Lição:** quando uma ferramenta de "descoberta automática" não coopera e o
+debugging não converge, vale considerar trocar por uma abordagem mais
+verbosa mas determinística, em vez de insistir indefinidamente no mecanismo
+automático.
+
+### Bug 4: campos JSON não decodificados (só `message` aparecia)
+
+Depois de trocar para o input direto, os logs chegavam no Kibana, mas apenas
+como um campo `message` de texto corrido — `level`, `logger_name`, etc não
+apareciam como campos filtráveis separados.
+
+**Causa:** existem duas camadas de JSON envolvidas. O Docker já grava logs de
+containers em JSON (`{"log": "...", "stream": "...", "time": "..."}`), e o
+input `type: container` decodifica **essa** camada automaticamente, extraindo
+o conteúdo real para o campo `message`. Mas o conteúdo *dentro* desse campo
+(nosso próprio JSON, gerado pelo `logback-spring.xml`) precisa de uma segunda
+decodificação explícita.
+
+**Correção:** adicionar `json.keys_under_root: true`, `json.add_error_key:
+true` e `json.message_key: message` ao input do Filebeat, promovendo os
+campos do JSON interno para a raiz do documento no Elasticsearch.
+
+### `docker compose down -v` remove TODOS os volumes, não só o pretendido
+
+Usar `down -v` repetidamente (hábito adquirido para resetar o schema do
+Postgres, por causa do `sql.init.mode: always`) também apagava, sem intenção,
+toda a configuração feita no Kibana (data views, etc) — porque o estado do
+Kibana é salvo dentro do próprio Elasticsearch (índices `.kibana-*`), não em
+armazenamento próprio dele. `-v` remove indiscriminadamente todos os volumes
+nomeados do projeto de uma vez.
+
+**Correção/hábito:** usar `docker compose down` (sem `-v`) para reinícios do
+dia a dia, preservando dados; remover volumes específicos por nome
+(`docker volume rm <projeto>_<volume>`) quando o objetivo é resetar só uma
+parte pontual do ambiente.
 
 ---
 
 ## Fase 5 em diante — Em andamento
 
-*(vou preencher conforme avançamos: logs com ELK, CI/CD, Kubernetes, AWS...)*
+*(vou preencher conforme avançamos: CI/CD, Kubernetes, AWS...)*
 
 ---
 
@@ -355,3 +450,6 @@ seguintes.
   um teste de integração mais completo?
 - Como testar `TaskEventPublisher` agora que ele depende de um Kafka real
   rodando? Vale a pena um teste de integração com Testcontainers?
+- Por que exatamente o autodiscover com hints falhou em gerar configuração
+  (Bug 3 acima)? Não cheguei à causa raiz definitiva, só contornei o problema.
+  Vale revisitar com mais tempo/uma versão diferente do Filebeat.
