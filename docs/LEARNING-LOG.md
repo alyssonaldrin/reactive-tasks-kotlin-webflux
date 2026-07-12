@@ -499,42 +499,57 @@ criticamente se ele agrega valor real ou só adiciona fragilidade e
 acoplamento a infraestrutura externa, especialmente quando testes mais
 específicos (unitários e de slice) já cobrem o comportamento importante.
 
-### Testcontainers KafkaContainer falha com apache/kafka:3.9.0
+---
 
-Erro: `advertised.listeners cannot use the nonroutable meta-address 0.0.0.0`.
-Causa: o Kafka 3.9 (KIP-853) passou a rejeitar `0.0.0.0` como endereço
-anunciado no modo KRaft, mas a auto-configuração do
+## Fase 6 em diante — Em andamento
+
+*(vou preencher conforme avançamos: Kubernetes, AWS...)*
+
+---
+
+## Desacoplamento: Ports & Adapters + testes com Testcontainers
+
+*(fora da numeração de fases — foi um refinamento pontual, não uma fase nova)*
+
+### `TaskEventPublisher` estava acoplado diretamente ao Kafka
+
+`TaskService` e `TaskController` dependiam da classe concreta
+`TaskEventPublisher`, que já nascia 100% implementada com Kafka por dentro.
+Isso tornava difícil trocar a tecnologia por trás (ou testar sem Kafka real)
+sem alterar várias classes.
+
+**Correção:** separado em interface (`TaskEventPublisher`, o "contrato") e
+implementação concreta (`KafkaTaskEventPublisher`, o "adaptador" Kafka),
+padrão conhecido como **Ports & Adapters** (Arquitetura Hexagonal).
+`TaskService`/`TaskController` passaram a depender só da interface — o
+Spring injeta a implementação automaticamente, sem qualquer mudança de código
+nessas classes.
+
+### Testes de integração com Testcontainers (respondendo pergunta em aberto)
+
+Escrito `KafkaTaskEventPublisherIntegrationTest`, testando a implementação
+Kafka contra um broker **real**, criado sob demanda via Testcontainers —
+sem precisar do `docker-compose.yml` rodando manualmente.
+
+**Bug 1 — imagem incompatível:** `apache/kafka:3.9.0` (mesma do
+`docker-compose.yml`) falhava com
+`advertised.listeners cannot use the nonroutable meta-address 0.0.0.0`.
+Causa: mudança recente no Kafka (KIP-853) rejeita `0.0.0.0` como endereço
+anunciado no modo KRaft, mas a auto-configuração da classe
 `org.testcontainers.kafka.KafkaContainer` ainda usa esse valor por padrão —
-um descompasso conhecido entre a versão do Kafka e essa versão do
-Testcontainers (issue documentada no próprio repositório do projeto).
+descompasso conhecido entre versões. **Correção:** usar
+`apache/kafka-native:3.8.0`, versão recomendada oficialmente pela
+documentação do módulo Kafka do Testcontainers.
 
-**Correção:** usar a imagem `apache/kafka-native:3.8.0`, recomendada
-oficialmente na documentação do módulo Kafka do Testcontainers, evitando essa
-combinação problemática.
-
-**Lição:** nem sempre a versão mais nova de uma imagem é compatível com
-ferramentas de teste que fazem configuração automática por trás — vale
-seguir a versão especificamente documentada/testada pela ferramenta em vez de
-assumir "a mais recente sempre funciona".
-
-### Race condition: publicar logo após conectar o stream (Kafka)
-
-O primeiro teste de integração com Testcontainers falhava
-intermitentemente: a mensagem publicada logo após `publisher.stream()`
-às vezes não era recebida. Causa: o `KafkaReceiver` leva um pequeno tempo
-(assíncrono) para completar a formação do consumer group e estabelecer a
-posição "latest" — se a mensagem é publicada antes desse processo terminar,
-ela pode ficar "para trás" da posição estabelecida e nunca ser entregue.
-
-**Correção:** adicionar `.thenAwait(Duration.ofSeconds(2))` no StepVerifier,
-entre a inscrição no stream e a publicação, dando tempo real para o consumer
-se estabelecer antes de qualquer evento ser produzido.
-
-**Lição:** essa mesma race condition existe na aplicação real, mas é
-imperceptível na prática — o cliente conectando no SSE naturalmente já
-"espera" um pouco antes do usuário disparar qualquer ação. Em testes, onde
-tudo acontece em sequência rápida, esse tipo de corrida se torna visível e
-precisa ser tratado explicitamente.
+**Bug 2 — race condition ao publicar logo após conectar:** o primeiro
+teste falhava de forma intermitente. O `KafkaReceiver` leva um tempo
+assíncrono para formar o consumer group e estabelecer a posição "latest";
+publicar imediatamente após `stream()` podia fazer a mensagem "ficar para
+trás" dessa posição e nunca ser entregue. **Correção:**
+`.thenAwait(Duration.ofSeconds(2))` no `StepVerifier`, dando tempo real para
+o consumer se estabelecer antes de qualquer publicação. Esse mesmo
+comportamento existe na aplicação real, mas é imperceptível na prática — só
+fica visível em testes, onde tudo acontece em sequência rápida.
 
 ---
 
@@ -552,8 +567,3 @@ precisa ser tratado explicitamente.
   subscription (via retorno do Controller)?
 - Vale a pena testar o conteúdo real do stream SSE (não só o Content-Type) em
   um teste de integração mais completo?
-- Como testar `TaskEventPublisher` agora que ele depende de um Kafka real
-  rodando? Vale a pena um teste de integração com Testcontainers?
-- Por que exatamente o autodiscover com hints falhou em gerar configuração
-  (Bug 3 acima)? Não cheguei à causa raiz definitiva, só contornei o problema.
-  Vale revisitar com mais tempo/uma versão diferente do Filebeat.
