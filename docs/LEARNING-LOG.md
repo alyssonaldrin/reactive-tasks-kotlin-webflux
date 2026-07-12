@@ -499,6 +499,43 @@ criticamente se ele agrega valor real ou só adiciona fragilidade e
 acoplamento a infraestrutura externa, especialmente quando testes mais
 específicos (unitários e de slice) já cobrem o comportamento importante.
 
+### Testcontainers KafkaContainer falha com apache/kafka:3.9.0
+
+Erro: `advertised.listeners cannot use the nonroutable meta-address 0.0.0.0`.
+Causa: o Kafka 3.9 (KIP-853) passou a rejeitar `0.0.0.0` como endereço
+anunciado no modo KRaft, mas a auto-configuração do
+`org.testcontainers.kafka.KafkaContainer` ainda usa esse valor por padrão —
+um descompasso conhecido entre a versão do Kafka e essa versão do
+Testcontainers (issue documentada no próprio repositório do projeto).
+
+**Correção:** usar a imagem `apache/kafka-native:3.8.0`, recomendada
+oficialmente na documentação do módulo Kafka do Testcontainers, evitando essa
+combinação problemática.
+
+**Lição:** nem sempre a versão mais nova de uma imagem é compatível com
+ferramentas de teste que fazem configuração automática por trás — vale
+seguir a versão especificamente documentada/testada pela ferramenta em vez de
+assumir "a mais recente sempre funciona".
+
+### Race condition: publicar logo após conectar o stream (Kafka)
+
+O primeiro teste de integração com Testcontainers falhava
+intermitentemente: a mensagem publicada logo após `publisher.stream()`
+às vezes não era recebida. Causa: o `KafkaReceiver` leva um pequeno tempo
+(assíncrono) para completar a formação do consumer group e estabelecer a
+posição "latest" — se a mensagem é publicada antes desse processo terminar,
+ela pode ficar "para trás" da posição estabelecida e nunca ser entregue.
+
+**Correção:** adicionar `.thenAwait(Duration.ofSeconds(2))` no StepVerifier,
+entre a inscrição no stream e a publicação, dando tempo real para o consumer
+se estabelecer antes de qualquer evento ser produzido.
+
+**Lição:** essa mesma race condition existe na aplicação real, mas é
+imperceptível na prática — o cliente conectando no SSE naturalmente já
+"espera" um pouco antes do usuário disparar qualquer ação. Em testes, onde
+tudo acontece em sequência rápida, esse tipo de corrida se torna visível e
+precisa ser tratado explicitamente.
+
 ---
 
 ## Fase 6 em diante — Em andamento
