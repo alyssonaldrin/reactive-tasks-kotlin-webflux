@@ -6,3 +6,4 @@ metadata:
 data:
   SPRING_R2DBC_URL: "r2dbc:postgresql://postgres:5432/tasks"
   SPRING_R2DBC_USERNAME: "postgres"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"

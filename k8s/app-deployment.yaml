@@ -13,6 +13,14 @@ spec:
       labels:
         app: reactive-tasks-app
     spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - "until nc -z kafka 9092; do echo esperando o Kafka...; sleep 3; done"
       containers:
         - name: app
           image: ghcr.io/alyssonaldrin/reactive-tasks-kotlin-webflux:latest
