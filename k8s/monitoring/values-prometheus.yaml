@@ -1,0 +1,35 @@
+# Valores ajustados para caber confortavelmente num cluster local (kind/Docker Desktop),
+# que já está rodando Postgres, Kafka e a aplicação.
+
+grafana:
+  adminPassword: admin
+  persistence:
+    enabled: false  # ambiente de estudo: não precisamos persistir dashboards entre reinícios do cluster
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+prometheus:
+  prometheusSpec:
+    retention: 6h  # retenção curta, suficiente para observar o teste de carga
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    storageSpec: { }  # sem volume persistente — dados de métricas são efêmeros aqui
+
+alertmanager:
+  enabled: false  # não vamos configurar alertas nesta fase de estudo
+
+nodeExporter:
+  enabled: true  # métricas do próprio node do cluster — bônus interessante para dashboards
+
+kubeStateMetrics:
+  enabled: true  # métricas sobre o estado dos recursos do Kubernetes (Pods, Deployments, etc)
