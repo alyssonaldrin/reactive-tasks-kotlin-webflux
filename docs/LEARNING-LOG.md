@@ -501,12 +501,6 @@ específicos (unitários e de slice) já cobrem o comportamento importante.
 
 ---
 
-## Fase 6 em diante — Em andamento
-
-*(vou preencher conforme avançamos: Kubernetes, AWS...)*
-
----
-
 ## Desacoplamento: Ports & Adapters + testes com Testcontainers
 
 *(fora da numeração de fases — foi um refinamento pontual, não uma fase nova)*
@@ -553,9 +547,246 @@ fica visível em testes, onde tudo acontece em sequência rápida.
 
 ---
 
-## Fase 6 em diante — Em andamento
+## Fase 6 — Kubernetes local
 
-*(vou preencher conforme avançamos: Kubernetes, AWS...)*
+### Conceitos
+
+- **Pod**: menor unidade do Kubernetes, geralmente um container rodando; efêmero (pode morrer e ser recriado a qualquer
+  momento).
+- **Deployment**: gerencia quantas réplicas de um Pod devem existir e como atualizá-las. Não se cria Pods diretamente —
+  cria-se um Deployment, que cuida disso.
+- **Service**: dá um endereço de rede estável para um grupo de Pods que vêm e vão, roteando tráfego via **label selector
+  ** (o Service escolhe Pods com base em labels, ex: `app: postgres`).
+- **ConfigMap**: configuração não-sensível, injetada como variáveis de ambiente.
+- **Secret**: igual ao ConfigMap, mas para dados sensíveis. Guardado em Base64 internamente (não é criptografia de
+  verdade — nunca versionar Secrets reais em repositório público).
+
+### Ferramentas escolhidas
+
+- **Cluster local**: Kubernetes embutido no Docker Desktop, usando `kind`
+  como método de provisionamento por baixo dos panos (opção padrão nas
+  versões recentes do Docker Desktop).
+- **Interface visual**: **Lens**, conectado ao cluster via o arquivo
+  kubeconfig (`~/.kube/config`) — mesmo arquivo que o `kubectl` já usa.
+
+### Manifestos criados (pasta `k8s/`)
+
+- `namespace.yaml`: namespace próprio (`reactive-tasks`), separando os
+  recursos do projeto do resto do cluster.
+- `postgres-secret.yaml`: credenciais do banco via `Secret`.
+- `postgres-deployment.yaml`: `PersistentVolumeClaim` (equivalente ao volume
+  nomeado do Docker Compose) + `Deployment` (com `readinessProbe` via
+  `pg_isready`, mesmo princípio do `healthcheck` do Compose) + `Service`.
+- `app-configmap.yaml`: configuração não-sensível da aplicação (URL do
+  banco, usuário).
+- `app-deployment.yaml`: `Deployment` com **2 réplicas** desde já (para já
+  exercitar múltiplas instâncias, mesmo cenário que motivou a migração para
+  Kafka na Fase 4.5) + `readinessProbe`/`livenessProbe` via
+  `/actuator/health` (reaproveitando o Actuator da Fase 4.7) + `Service` do
+  tipo `LoadBalancer`.
+
+A senha do banco é injetada na aplicação via `secretKeyRef` (lendo do
+`Secret` do Postgres), enquanto o resto da configuração vem do `ConfigMap` —
+separação proposital entre dado sensível e configuração comum.
+
+### Lens não mostrava Pods mesmo com o cluster certo
+
+Depois de conectar o Lens ao cluster `docker-desktop`, nenhum Pod ou
+Deployment aparecia, mesmo com `kubectl get pods -n reactive-tasks`
+confirmando que tudo estava `Running`.
+
+**Causa:** o Lens tem um seletor de **namespaces** próprio, independente do
+`kubectl`, e por padrão pode estar filtrando só o namespace `default` (ou
+nenhum específico). Como criamos tudo no namespace `reactive-tasks`, nada
+aparecia até marcar esse namespace explicitamente no filtro do Lens.
+
+**Lição:** ferramentas visuais que consomem a mesma API do `kubectl` podem
+ter seus próprios filtros/estado de UI — confirmar sempre via `kubectl`
+(fonte da verdade) antes de assumir que algo está errado no cluster em si.
+
+### `kind` não distribui tráfego uniformemente entre réplicas
+
+Com `replicas: 2`, requisições repetidas via `Service` do tipo
+`LoadBalancer` sempre bateram no mesmo Pod, mesmo com as duas réplicas
+saudáveis (`READY 1/1`, confirmado via `kubectl get endpoints`).
+
+**Causa:** `kind` simula um `LoadBalancer` usando o próprio Docker, sem um
+balanceador de carga real por trás — diferente de um ambiente cloud (AWS/EKS)
+onde o Load Balancer é um componente de infraestrutura de verdade. Localmente
+essa distribuição costuma ser bem menos uniforme, especialmente com poucas
+requisições e conexões reaproveitadas (keep-alive).
+
+**Lição:** ambientes Kubernetes locais são ótimos para aprender conceitos e
+manifestos, mas alguns comportamentos de infraestrutura (balanceamento de
+carga real, storage distribuído, etc) só se manifestam de fato num ambiente
+cloud gerenciado. Nem tudo que "parece diferente" localmente é um bug do
+manifesto.
+
+---
+
+## Fase 6 (continuação) — Kafka no cluster, HPA e teste de carga
+
+### Kafka em Kubernetes: bind em 0.0.0.0 sem endereço anunciado explícito falha
+
+Configuramos `CONTROLLER://0.0.0.0:9093` como listener, sem uma entrada
+correspondente em `KAFKA_ADVERTISED_LISTENERS` (mesmo padrão que funcionava
+no `docker-compose.yml`, onde o CONTROLLER nunca usava `0.0.0.0`, sempre um
+hostname real). No Kubernetes, isso causava
+`advertised.listeners cannot use the nonroutable meta-address 0.0.0.0` —
+o Kafka usa o próprio endereço de escuta como fallback para o anunciado
+quando não há um explícito, e a versão 3.9 (KIP-853) passou a rejeitar esse
+fallback quando ele resulta em `0.0.0.0`.
+
+**Correção parcial 1:** usar a **Downward API** (`fieldRef: status.podIP`)
+para obter o IP real do Pod, usando-o como bind tanto do listener de cliente
+quanto do controller — evitando `0.0.0.0`. O endereço *anunciado* pra
+aplicação continua sendo o nome do Service (`kafka`), estável entre
+reinícios.
+
+**Novo problema:** a `readinessProbe` (via `exec`) usava `localhost:9092`,
+mas o bind não incluía mais `localhost` (só o IP real do Pod), então a probe
+sempre falhava mesmo com o Kafka saudável.
+
+**Tentativa de correção com `$(POD_IP)` na probe:** não funcionou — a
+substituição de `$(VAR)` do Kubernetes funciona dentro do bloco `env:`
+(confirmado no `KafkaConfig` resolvido, com IPs reais), mas **não** é
+aplicada da mesma forma dentro de `readinessProbe.exec.command` — o valor
+chegava vazio.
+
+**Correção final:** trocar a probe de `exec` para `tcpSocket: port: 9092` —
+mais simples (só testa se a porta aceita conexão, sem precisar resolver
+nenhum endereço) e elimina essa classe inteira de problema.
+
+**Lição:** no Docker Compose, o nome do container é resolvido para o IP do
+próprio container, permitindo "escutar" nele diretamente. No Kubernetes, o
+nome do Service é um endereço virtual (roteado externamente ao Pod) — não dá
+para "escutar" nele de dentro do próprio Pod. A Downward API resolve a
+necessidade de obter o IP real do Pod, mas essa substituição não é uniforme
+em todos os contextos (funciona em `env`, não em `exec.command` de probes).
+
+### `enableServiceLinks: false` — variáveis de ambiente injetadas pelo Service podem colidir
+
+Antes de descobrir a causa real (acima), suspeitei que variáveis de ambiente
+que o Kubernetes injeta automaticamente para cada Service do namespace
+(compatibilidade com Docker links, ex: `KAFKA_PORT`, `KAFKA_PORT_9092_TCP`)
+pudessem interferir na leitura de variáveis `KAFKA_*` feita pela imagem
+`apache/kafka`. Adicionei `enableServiceLinks: false` ao Pod como precaução
+— não era a causa raiz desse bug específico, mas é uma boa prática geral:
+evita colisões de nomes em imagens que fazem varredura ampla de variáveis de
+ambiente com um prefixo comum.
+
+### HPA + Metrics Server
+
+Instalado o **Metrics Server** (não vem por padrão no Kubernetes do Docker
+Desktop), necessário para o HPA saber o uso de CPU/memória dos Pods.
+Precisou da flag `--kubelet-insecure-tls` (via patch JSON, não inline —
+aspas simples em JSON inline quebravam no PowerShell), já que certificados
+TLS entre nodes não são válidos em cluster local.
+
+Configurado um `HorizontalPodAutoscaler` visando 50% de utilização média de
+CPU (relativo ao `requests.cpu` do Deployment), min 2 / max 6 réplicas, com
+`behavior` customizado para escalar rápido (útil para observar o teste de
+carga) e desescalar com mais cautela (evita "flapping").
+
+### Teste de carga com k6
+
+Script `load-test.js` com estágios de carga crescente/decrescente (`stages`),
+misturando 80% leitura (`GET /api/tasks`) e 20% escrita (`POST /api/tasks`,
+exercitando o pipeline completo incluindo Kafka). Rodado via Docker
+(`grafana/k6`), já que `--network host` não funciona de forma confiável no
+Docker Desktop para Windows — resolvido usando `host.docker.internal` como
+endereço da aplicação, com o BASE_URL parametrizado via variável de ambiente
+do k6 (`__ENV.BASE_URL`).
+
+---
+
+## Fase 6 (continuação) — Observabilidade dentro do cluster (Helm)
+
+Decidido usar **Helm** em vez de manifestos manuais para Prometheus, Grafana
+e (planejado) ELK — depois da experiência de configurar o Kafka manualmente
+em YAML puro, ficou claro que ferramentas complexas como essas têm
+particularidades demais para valer a pena escrever do zero, quando já
+existem *charts* maduros e testados pela comunidade.
+
+Instalado `kube-prometheus-stack` (Prometheus + Grafana + kube-state-metrics
+
++ node-exporter, Alertmanager desabilitado) num namespace próprio
+  (`monitoring`), com valores customizados reduzindo requests/limits de
+  recursos e desabilitando persistência (ambiente de estudo, dados efêmeros
+  são aceitáveis).
+
+### ServiceMonitor: selector busca labels do Service, não do spec.selector
+
+Configurado um `ServiceMonitor` para o Prometheus (gerenciado pelo Operator
+do chart) coletar métricas da aplicação. Mesmo com o `ServiceMonitor`
+reconhecido (aparecia como scrape pool no Prometheus), nenhum alvo era
+encontrado ("0/0 up, No active targets").
+
+**Causa:** o `selector.matchLabels` de um `ServiceMonitor` procura labels no
+**próprio objeto Service** (`metadata.labels`), não no `spec.selector` do
+Service (usado para rotear tráfego aos Pods) nem nos labels dos Pods
+diretamente. Nosso Service não tinha `metadata.labels` — só `spec.selector`.
+
+**Correção:** adicionar `metadata.labels: app: reactive-tasks-app` ao
+próprio Service.
+
+**Lição:** `spec.selector` (Service → Pods) e `metadata.labels` (identidade
+do próprio objeto) são conceitos relacionados mas distintos no Kubernetes —
+um ponto de confusão comum ao configurar observabilidade via Prometheus
+Operator.
+
+### Grafana subdimensionado: "context deadline exceeded" generalizado
+
+Depois de recriar o cluster, o Pod do Grafana ficava preso em
+`Readiness probe failed: connection refused`, e os logs mostravam
+requisições internas (SQLite, indexação de busca) levando 1-3 **minutos**
+para completar, muito acima do normal.
+
+**Causa:** os `resources.requests/limits` definidos inicialmente
+(`100m`/`128Mi`) eram insuficientes para as versões atuais do Grafana, que
+ficou consideravelmente mais pesado (inclui um "mini apiserver" interno,
+indexação via bleve, etc). Combinado com o cluster já rodando bastante coisa
+(Postgres, Kafka, múltiplas réplicas da app, Prometheus, node-exporter),
+havia contenção real de recursos no node.
+
+**Correção:** aumentar os recursos do Grafana via `helm upgrade` (para
+`250m`/`384Mi` de request), e considerar aumentar a alocação de CPU/memória
+do próprio Docker Desktop caso o node inteiro esteja saturado
+(`kubectl top nodes` ajuda a diagnosticar isso).
+
+### Dashboard importado (ID 4701) vazio: uma cadeia de pequenos problemas
+
+Importar um dashboard pronto da comunidade para métricas de JVM/Spring Boot
+não "simplesmente funcionou" — precisou de uma sequência de ajustes:
+
+1. **Tag `application` ausente**: o dashboard espera que cada métrica tenha
+   uma label `application` com o nome da app — não é algo automático do
+   Micrometer, precisa ser configurado explicitamente via
+   `management.metrics.tags.application` (setado como variável de ambiente
+   `MANAGEMENT_METRICS_TAGS_APPLICATION` no ConfigMap, sem precisar
+   rebuildar a imagem, graças ao *relaxed binding* do Spring Boot).
+2. **Variável `instance` como multi-value**: com 2 réplicas da aplicação, a
+   variável de template `instance` vinha configurada para múltipla seleção
+   por padrão. Isso fazia o Grafana substituir `$instance` num formato de
+   regex (`(ip1|ip2)`) dentro de uma query que usava igualdade exata (`=`),
+   nunca batendo com nenhum valor real. Corrigido desligando
+   "Multi-value" e "Include All value" na configuração da variável.
+3. **Datasource `${DS_PROMETHEUS}` não resolvida**: alguns painéis
+   específicos do dashboard importado mantiveram uma variável de "input" de
+   importação (`${DS_PROMETHEUS}`) não substituída pela fonte de dados real,
+   mesmo após a importação — corrigido editando o JSON Model do dashboard
+   diretamente, substituindo as ocorrências pelo UID real (`prometheus`).
+
+**Lição geral:** dashboards prontos de terceiros economizam trabalho, mas
+carregam suposições implícitas (nomes de labels, tags customizadas, convenção
+de variáveis) que nem sempre batem de primeira com o setup de quem importa.
+Vale sempre confirmar a métrica crua primeiro (via Explore, sem dashboard),
+antes de assumir que o problema está na coleta em vez da apresentação —
+nesse caso, os dados sempre estiveram lá, corretos, o tempo todo.
+
+---
+
+*(vou preencher conforme avançamos: Kafka no cluster, HPA, teste de carga, AWS...)*
 
 ---
 
