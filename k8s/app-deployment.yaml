@@ -60,10 +60,13 @@ kind: Service
 metadata:
   name: reactive-tasks-app
   namespace: reactive-tasks
+  labels:
+    app: reactive-tasks-app
 spec:
   type: LoadBalancer
   selector:
     app: reactive-tasks-app
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
       targetPort: 8080
